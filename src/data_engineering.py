@@ -1,4 +1,11 @@
 import os
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 import numpy as np
 import pandas as pd
@@ -144,42 +151,61 @@ def _merge_datasets(smart_hourly: pd.DataFrame, weather: pd.DataFrame) -> pd.Dat
     return merged
 
 
+def _reindex_continuous_hourly(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Force a gapless hourly DatetimeIndex between the first and last timestamp.
+
+    XGBoost's row-wise features don't care if hour 500 and hour 502 are
+    3 hours apart in real time — each row is independent. A sequence model
+    (LSTM/GRU) treats consecutive rows as consecutive hours; a silent missing
+    hour would make it learn a fake 2-hour jump as if it were 1 hour. Doing
+    this reindex BEFORE the fill/outlier step lets the existing ffill/bfill
+    logic repair the newly-introduced NaN rows exactly like any other gap.
+    """
+    full_range = pd.date_range(df.index.min(), df.index.max(), freq="1h", name=df.index.name)
+    missing = full_range.difference(df.index)
+    if len(missing) > 0:
+        print(f"      Reindexing to continuous hourly range — filling {len(missing)} missing hour(s)")
+    df = df.reindex(full_range)
+    return df
+
+
 def _handle_missing(df: pd.DataFrame) -> pd.DataFrame:
     """
-    1. Forward-fill then backward-fill gaps ≤ 2 hours (sensor drop-outs).
-    2. Drop rows where energy_kwh is still NaN (irrecoverable).
+    0. Reindex to a gapless hourly range (see _reindex_continuous_hourly).
+    1. Clamp voltage to Indian grid tolerance: 230V ± 10% → [180, 260] V.
+    2. Clamp frequency to Indian grid standard: 50 Hz ± 3% → [48.5, 51.5] Hz.
     3. Remove negative energy readings (meter faults).
-    4. Clamp voltage to Indian grid tolerance: 230V ± 10% → [180, 260] V.
-    5. Clamp frequency to Indian grid standard: 50 Hz ± 3% → [48.5, 51.5] Hz.
+    4. Time-interpolate and ffill/bfill all features so sequence models (LSTM) receive 0 NaNs.
     """
     print("[5/5] Cleaning missing values & outliers …")
 
-    before = len(df)
-    df = df.ffill(limit=2).bfill(limit=2)
-
-    df = df.dropna(subset=["energy_kwh"])
-    print(f"      Rows dropped (NaN)     : {before - len(df)}")
-
-    neg = df["energy_kwh"] < 0
-    df = df[~neg]
-    print(f"      Negative energy rows   : {neg.sum()}")
+    df = _reindex_continuous_hourly(df)
 
     if "voltage_v" in df.columns:
         out_v = (df["voltage_v"] < 180) | (df["voltage_v"] > 260)
         df.loc[out_v, "voltage_v"] = np.nan
-        df["voltage_v"] = df["voltage_v"].ffill(limit=2).bfill(limit=2)
         print(f"      Voltage outliers clamped : {out_v.sum()}")
 
     if "frequency_hz" in df.columns:
         out_f = (df["frequency_hz"] < 48.5) | (df["frequency_hz"] > 51.5)
         df.loc[out_f, "frequency_hz"] = np.nan
-        df["frequency_hz"] = (
-            df["frequency_hz"]
+        print(f"      Frequency outliers clamped : {out_f.sum()}")
+
+    if "energy_kwh" in df.columns:
+        neg = df["energy_kwh"] < 0
+        if neg.sum() > 0:
+            df.loc[neg, "energy_kwh"] = np.nan
+            print(f"      Negative energy rows clamped : {neg.sum()}")
+
+    num_cols = df.select_dtypes(include=np.number).columns
+    for col in num_cols:
+        df[col] = (
+            df[col]
             .interpolate(method="time", limit_direction="both")
             .ffill()
             .bfill()
         )
-        print(f"      Frequency outliers clamped : {out_f.sum()}")
 
     print(f"      Final shape            : {df.shape}")
     print(f"      Remaining NaNs         : {df.isnull().sum().sum()}")
@@ -222,6 +248,12 @@ def load_and_prepare_data(
     merged = _merge_datasets(smart_hourly, weather)
     clean = _handle_missing(merged)
 
+    gaps = clean.index.to_series().diff().dropna().unique()
+    assert len(gaps) == 1 and gaps[0] == pd.Timedelta("1h"), (
+        f"Index is not perfectly hourly after cleaning — found gap(s): {gaps}. "
+        "A sequence model (LSTM/GRU) needs a gapless index; investigate before training."
+    )
+
     if save_processed:
         os.makedirs(os.path.dirname(PROCESSED_PATH), exist_ok=True)
         clean.to_csv(PROCESSED_PATH)
@@ -247,3 +279,4 @@ if __name__ == "__main__":
     df = load_and_prepare_data()
     print("\nFirst 10 rows of clean hourly data:")
     print(df.head(10).to_string())
+    

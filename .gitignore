@@ -19,6 +19,7 @@ data/raw/
 models/*.json
 models/*.pkl
 models/*.ubj
+models/*.pt
 
 # Streamlit cache
 .streamlit/

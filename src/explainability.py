@@ -1,5 +1,12 @@
 import json
 import os
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 import joblib
 import numpy as np
@@ -7,29 +14,69 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import shap
-from xgboost import XGBRegressor
-
-from src.modeling import (
-    build_features,
-    get_predictions_df,
-    load_model_artifacts,
-    load_processed,
-    split_data,
-)
+import torch
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from src.modeling import (
+    DEVICE,
+    LOOKBACK_HOURS,
+    FORECAST_HORIZON,
+    add_calendar_features,
+    build_windows,
+    evaluate_model,
+    fit_and_scale,
+    get_predictions_df,
+    load_model_artifacts,
+    load_processed,
+)
 
 EMISSION_FACTOR_KG_PER_KWH = 0.82
 METRICS_PATH = os.path.join(_ROOT, "models", "metrics.json")
 
 
-def compute_shap_values(model: XGBRegressor, scaler, X_test: pd.DataFrame):
-    X_scaled = scaler.transform(X_test)
-    X_scaled_df = pd.DataFrame(X_scaled, columns=X_test.columns, index=X_test.index)
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer(X_scaled_df)
-    return shap_values, X_scaled_df
+def compute_shap_values(model, X_test: np.ndarray, feature_names: list = None, num_samples: int = None):
+    """
+    Compute Gradient x Input feature attributions for PyTorch LSTM sequence model
+    and wrap them in a standard shap.Explanation object for visualization.
+    """
+    model.eval()
+    if num_samples is not None:
+        sample_len = min(num_samples, len(X_test))
+        sample_X = X_test[:sample_len]
+    else:
+        sample_X = X_test
+
+    x_tensor = torch.tensor(sample_X, dtype=torch.float32, requires_grad=True).to(DEVICE)
+    preds = model(x_tensor)
+
+    # Target: explain the first hour forecast (next-hour)
+    target = preds[:, 0].sum()
+    target.backward()
+
+    grad = x_tensor.grad.detach().cpu().numpy()
+    x_val = x_tensor.detach().cpu().numpy()
+
+    # Time-averaged attribution per feature across the lookback window
+    attributions = np.mean(grad * x_val, axis=1)
+    data_summary = np.mean(x_val, axis=1)
+
+    if feature_names is None:
+        feature_names = [f"Feature_{i}" for i in range(sample_X.shape[-1])]
+
+    base_val = float(preds[:, 0].mean().detach().cpu().numpy())
+    base_values = np.full((len(sample_X),), base_val)
+
+    shap_values = shap.Explanation(
+        values=attributions,
+        base_values=base_values,
+        data=data_summary,
+        feature_names=feature_names,
+    )
+    return shap_values, data_summary
 
 
 def plot_shap_bar(shap_values, top_n: int = 15) -> go.Figure:
@@ -52,16 +99,28 @@ def plot_shap_bar(shap_values, top_n: int = 15) -> go.Figure:
         x="importance",
         y="feature",
         orientation="h",
-        title=f"SHAP Feature Importance (Top {top_n})",
-        labels={"importance": "Mean |SHAP Value|", "feature": "Feature"},
+        title=f"Feature Attribution (Top {top_n})",
+        labels={"importance": "Mean |Attribution Value|", "feature": "Feature"},
         color="importance",
         color_continuous_scale="Teal",
     )
     fig.update_layout(
-        title_font_size=18,
+        paper_bgcolor="#131d31",
+        plot_bgcolor="#131d31",
+        font=dict(color="#f1f5f9", family="Inter, sans-serif"),
+        title=dict(font=dict(color="#f8fafc", size=16)),
+        xaxis=dict(
+            title=dict(text="Mean |Attribution Value|", font=dict(color="#f8fafc", size=12)),
+            tickfont=dict(color="#cbd5e1", size=11),
+            gridcolor="#283347",
+        ),
+        yaxis=dict(
+            title=dict(text="Feature", font=dict(color="#f8fafc", size=12)),
+            tickfont=dict(color="#cbd5e1", size=11),
+            gridcolor="#283347",
+        ),
         coloraxis_showscale=False,
         margin=dict(l=20, r=20, t=60, b=20),
-        yaxis=dict(tickfont=dict(size=11)),
     )
     return fig
 
@@ -87,30 +146,41 @@ def plot_shap_beeswarm(shap_values, max_display: int = 15) -> go.Figure:
                 y=[fname] * len(sv),
                 mode="markers",
                 marker=dict(
-                    size=4,
+                    size=5,
                     color=fv_norm,
                     colorscale="RdBu_r",
-                    opacity=0.6,
+                    opacity=0.7,
                 ),
                 showlegend=False,
             )
         )
 
     fig.update_layout(
-        title=f"SHAP Beeswarm Plot (Top {max_display} Features)",
-        title_font_size=18,
-        xaxis_title="SHAP Value (impact on model output)",
-        yaxis_title="Feature",
+        paper_bgcolor="#131d31",
+        plot_bgcolor="#131d31",
+        font=dict(color="#f1f5f9", family="Inter, sans-serif"),
+        title=dict(text=f"Feature Impact Distribution (Top {max_display} Features)", font=dict(color="#f8fafc", size=16)),
+        xaxis=dict(
+            title=dict(text="Attribution Impact on Forecast", font=dict(color="#f8fafc", size=12)),
+            tickfont=dict(color="#cbd5e1", size=11),
+            gridcolor="#283347",
+        ),
+        yaxis=dict(
+            title=dict(text="Feature", font=dict(color="#f8fafc", size=12)),
+            tickfont=dict(color="#cbd5e1", size=11),
+            gridcolor="#283347",
+        ),
         margin=dict(l=20, r=20, t=60, b=20),
         height=500,
     )
-    fig.add_vline(x=0, line_dash="dash", line_color="grey", line_width=1)
+    fig.add_vline(x=0, line_dash="dash", line_color="#94a3b8", line_width=1)
     return fig
 
 
 def plot_shap_waterfall(shap_values, sample_idx: int = 0) -> go.Figure:
+    sample_idx = max(0, min(sample_idx, len(shap_values.values) - 1))
     sv = shap_values.values[sample_idx]
-    base = float(shap_values.base_values[sample_idx])
+    base = float(shap_values.base_values[sample_idx]) if hasattr(shap_values.base_values, '__len__') else float(shap_values.base_values)
     feature_names = shap_values.feature_names
 
     order = np.argsort(np.abs(sv))[::-1][:12]
@@ -120,7 +190,7 @@ def plot_shap_waterfall(shap_values, sample_idx: int = 0) -> go.Figure:
     cumulative = np.cumsum(values)
     starts = np.concatenate([[base], base + cumulative[:-1]])
 
-    colors = ["#d62728" if v > 0 else "#1f77b4" for v in values]
+    colors = ["#ef4444" if v > 0 else "#38bdf8" for v in values]
 
     fig = go.Figure(
         go.Bar(
@@ -130,22 +200,34 @@ def plot_shap_waterfall(shap_values, sample_idx: int = 0) -> go.Figure:
             marker_color=colors,
             text=[f"{v:+.3f}" for v in values],
             textposition="outside",
+            textfont=dict(color="#f8fafc", size=11),
         )
     )
 
     fig.add_hline(
         y=base,
         line_dash="dot",
-        line_color="grey",
+        line_color="#94a3b8",
         annotation_text=f"Base: {base:.3f}",
         annotation_position="top left",
+        annotation_font=dict(color="#f8fafc", size=12),
     )
 
     fig.update_layout(
-        title=f"SHAP Waterfall — Sample #{sample_idx}",
-        title_font_size=18,
-        xaxis_title="Feature",
-        yaxis_title="SHAP Contribution (kWh)",
+        paper_bgcolor="#131d31",
+        plot_bgcolor="#131d31",
+        font=dict(color="#f1f5f9", family="Inter, sans-serif"),
+        title=dict(text=f"Feature Contribution Waterfall — Sample #{sample_idx}", font=dict(color="#f8fafc", size=16)),
+        xaxis=dict(
+            title=dict(text="Feature", font=dict(color="#f8fafc", size=12)),
+            tickfont=dict(color="#cbd5e1", size=11),
+            gridcolor="#283347",
+        ),
+        yaxis=dict(
+            title=dict(text="Attribution (kWh scaled)", font=dict(color="#f8fafc", size=12)),
+            tickfont=dict(color="#cbd5e1", size=11),
+            gridcolor="#283347",
+        ),
         margin=dict(l=20, r=20, t=60, b=40),
         showlegend=False,
     )
@@ -153,37 +235,60 @@ def plot_shap_waterfall(shap_values, sample_idx: int = 0) -> go.Figure:
 
 
 def plot_actual_vs_predicted(pred_df: pd.DataFrame) -> go.Figure:
+    act_col = "actual_next_hour" if "actual_next_hour" in pred_df.columns else pred_df.columns[0]
+    pred_col = "predicted_next_hour" if "predicted_next_hour" in pred_df.columns else pred_df.columns[1]
+
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
             x=pred_df.index,
-            y=pred_df["actual"],
+            y=pred_df[act_col],
             name="Actual",
-            line=dict(color="#1f77b4", width=1.5),
+            line=dict(color="#38bdf8", width=1.8),
         )
     )
     fig.add_trace(
         go.Scatter(
             x=pred_df.index,
-            y=pred_df["predicted"],
+            y=pred_df[pred_col],
             name="Predicted",
-            line=dict(color="#ff7f0e", width=1.5, dash="dot"),
+            line=dict(color="#f472b6", width=1.8, dash="dot"),
         )
     )
     fig.update_layout(
-        title="Actual vs Predicted Energy Consumption — Test Set",
-        title_font_size=18,
-        xaxis_title="Datetime",
-        yaxis_title="Energy (kWh)",
+        paper_bgcolor="#131d31",
+        plot_bgcolor="#131d31",
+        font=dict(color="#f1f5f9", family="Inter, sans-serif"),
+        title=dict(text="Actual vs Predicted Energy Consumption — Next Hour", font=dict(color="#f8fafc", size=16)),
+        xaxis=dict(
+            title=dict(text="Time / Window Index", font=dict(color="#f8fafc", size=12)),
+            tickfont=dict(color="#cbd5e1", size=11),
+            gridcolor="#283347",
+        ),
+        yaxis=dict(
+            title=dict(text="Energy (kWh)", font=dict(color="#f8fafc", size=12)),
+            tickfont=dict(color="#cbd5e1", size=11),
+            gridcolor="#283347",
+        ),
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(color="#f1f5f9", size=12),
+        ),
         margin=dict(l=20, r=20, t=80, b=20),
     )
     return fig
 
 
 def plot_residuals(pred_df: pd.DataFrame) -> go.Figure:
-    residuals = pred_df["actual"] - pred_df["predicted"]
+    act_col = "actual_next_hour" if "actual_next_hour" in pred_df.columns else pred_df.columns[0]
+    pred_col = "predicted_next_hour" if "predicted_next_hour" in pred_df.columns else pred_df.columns[1]
+    residuals = pred_df[act_col] - pred_df[pred_col]
+
     fig = px.histogram(
         residuals,
         nbins=60,
@@ -191,11 +296,24 @@ def plot_residuals(pred_df: pd.DataFrame) -> go.Figure:
         labels={"value": "Residual (kWh)", "count": "Frequency"},
     )
     fig.update_traces(
-        marker_color="#2ca02c", marker_line_color="white", marker_line_width=0.5
+        marker_color="#10b981", marker_line_color="#1e293b", marker_line_width=0.5
     )
-    fig.add_vline(x=0, line_dash="dash", line_color="red", line_width=1.5)
+    fig.add_vline(x=0, line_dash="dash", line_color="#ef4444", line_width=1.5)
     fig.update_layout(
-        title_font_size=18,
+        paper_bgcolor="#131d31",
+        plot_bgcolor="#131d31",
+        font=dict(color="#f1f5f9", family="Inter, sans-serif"),
+        title=dict(text="Residuals Distribution (Actual − Predicted)", font=dict(color="#f8fafc", size=16)),
+        xaxis=dict(
+            title=dict(text="Residual (kWh)", font=dict(color="#f8fafc", size=12)),
+            tickfont=dict(color="#cbd5e1", size=11),
+            gridcolor="#283347",
+        ),
+        yaxis=dict(
+            title=dict(text="Frequency", font=dict(color="#f8fafc", size=12)),
+            tickfont=dict(color="#cbd5e1", size=11),
+            gridcolor="#283347",
+        ),
         margin=dict(l=20, r=20, t=60, b=20),
         showlegend=False,
     )
@@ -208,11 +326,11 @@ def calculate_carbon_footprint(predicted_kwh: float) -> dict:
     km_driven = kg_co2 / 0.21
 
     return {
-        "predicted_kwh": round(predicted_kwh, 4),
+        "predicted_kwh": round(float(predicted_kwh), 4),
         "emission_factor": EMISSION_FACTOR_KG_PER_KWH,
-        "kg_co2": round(kg_co2, 4),
-        "trees_to_offset": round(trees_offset, 2),
-        "equivalent_km_driven": round(km_driven, 2),
+        "kg_co2": round(float(kg_co2), 4),
+        "trees_to_offset": round(float(trees_offset), 2),
+        "equivalent_km_driven": round(float(km_driven), 2),
     }
 
 
@@ -261,20 +379,21 @@ def plot_carbon_gauge(predicted_kwh: float) -> go.Figure:
 def run_explainability_pipeline():
     print("Loading processed data and artifacts …")
     df = load_processed()
-    fe = build_features(df)
-    X_train, X_test, y_train, y_test, feature_cols = split_data(fe)
-    model, scaler, metrics = load_model_artifacts()
+    fe = add_calendar_features(df)
+    scaled, feature_cols, feature_scaler, target_scaler, train_end, val_end = fit_and_scale(fe)
+    X_train, y_train, X_val, y_val, X_test, y_test = build_windows(scaled, feature_cols, train_end, val_end)
 
-    from src.modeling import evaluate_model
+    model, _, _, config, metrics = load_model_artifacts()
+    all_feature_names = config["feature_cols"] + [config["target_col"]]
 
-    metrics_out, y_pred = evaluate_model(model, scaler, X_test, y_test)
-    pred_df = get_predictions_df(X_test, y_test, y_pred)
+    metrics_out, y_pred, y_true = evaluate_model(model, X_test, y_test, target_scaler)
+    pred_df = get_predictions_df(y_true, y_pred)
 
-    print("Computing SHAP values (may take ~20 seconds) …")
-    shap_values, X_scaled_df = compute_shap_values(model, scaler, X_test)
-    print("SHAP values computed.")
+    print("Computing feature attributions for PyTorch LSTM …")
+    shap_values, _ = compute_shap_values(model, X_test, feature_names=all_feature_names)
+    print("Attributions computed.")
 
-    sample_kwh = float(pred_df["predicted"].iloc[0])
+    sample_kwh = float(pred_df["predicted_next_hour"].iloc[0])
     carbon = calculate_carbon_footprint(sample_kwh)
 
     print("\n" + "=" * 50)
