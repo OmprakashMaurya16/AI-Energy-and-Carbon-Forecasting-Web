@@ -320,22 +320,24 @@ def plot_residuals(pred_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def calculate_carbon_footprint(predicted_kwh: float) -> dict:
-    kg_co2 = predicted_kwh * EMISSION_FACTOR_KG_PER_KWH
+def calculate_carbon_footprint(predicted_kwh: float, emission_factor: float = None) -> dict:
+    ef = emission_factor if emission_factor is not None else EMISSION_FACTOR_KG_PER_KWH
+    kg_co2 = predicted_kwh * ef
     trees_offset = kg_co2 / 21.77
     km_driven = kg_co2 / 0.21
 
     return {
         "predicted_kwh": round(float(predicted_kwh), 4),
-        "emission_factor": EMISSION_FACTOR_KG_PER_KWH,
+        "emission_factor": ef,
         "kg_co2": round(float(kg_co2), 4),
         "trees_to_offset": round(float(trees_offset), 2),
         "equivalent_km_driven": round(float(km_driven), 2),
     }
 
 
-def plot_carbon_gauge(predicted_kwh: float) -> go.Figure:
-    carbon = calculate_carbon_footprint(predicted_kwh)
+def plot_carbon_gauge(predicted_kwh: float, emission_factor: float = None) -> go.Figure:
+    ef = emission_factor if emission_factor is not None else EMISSION_FACTOR_KG_PER_KWH
+    carbon = calculate_carbon_footprint(predicted_kwh, emission_factor=ef)
     kg = carbon["kg_co2"]
 
     fig = go.Figure(
@@ -343,9 +345,9 @@ def plot_carbon_gauge(predicted_kwh: float) -> go.Figure:
             mode="gauge+number+delta",
             value=kg,
             title={"text": "Carbon Footprint (kg CO₂)", "font": {"size": 18}},
-            delta={"reference": EMISSION_FACTOR_KG_PER_KWH * 5, "valueformat": ".2f"},
+            delta={"reference": ef * 5, "valueformat": ".2f"},
             gauge={
-                "axis": {"range": [0, EMISSION_FACTOR_KG_PER_KWH * 25]},
+                "axis": {"range": [0, ef * 25]},
                 "bar": {"color": "#d62728"},
                 "steps": [
                     {"range": [0, EMISSION_FACTOR_KG_PER_KWH * 5], "color": "#2ca02c"},

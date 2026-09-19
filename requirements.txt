@@ -8,3 +8,4 @@ plotly>=5.18
 streamlit>=1.32
 
 openpyxl>=3.1
+statsmodels>=0.14

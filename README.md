@@ -1,152 +1,201 @@
-# ⚡ Explainable Deep Learning Energy & Carbon Forecaster
+# ⚡ AI Energy & Carbon Forecasting Web
 
-An end-to-end Deep Learning pipeline and interactive web application for multi-horizon household energy consumption forecasting and carbon footprint estimation using Indian smart meter data (**Mathura 2020**) and local weather features.
+An end-to-end Deep Learning sequence modeling pipeline and interactive web application for multi-horizon household energy consumption forecasting, state-level power grid benchmarking, and carbon emission analytics.
 
----
-
-## 🚀 Key Highlights
-
-* **Deep Learning Sequence Model**: 2-layer **PyTorch LSTM** neural network trained with sliding history windows of **168 hours (1 week)** to predict the next **24 hours** in a single multi-step forward pass.
-* **Robust Time-Series Pipeline**: Automated 3-minute to 1-hour aggregation, continuous gapless reindexing, and time-based interpolation across 3.7+ million raw meter readings.
-* **Explainable AI (XAI)**: Gradient-based deep feature attribution (`Gradient × Input`) across temporal sequence dimensions, visualizing feature importance with **SHAP Bar, Beeswarm, and Waterfall** breakdown charts.
-* **Carbon Emission & Sustainability Analytics**: Real-time conversion of energy demand to $\text{CO}_2$ emissions based on the Indian grid emission baseline (**$0.82\text{ kg CO}_2/\text{kWh}$**), equivalent driving distances, and tree-offset equivalencies.
-* **Modern Dark-Themed Web Dashboard**: Built with **Streamlit** and **Plotly**, featuring high-contrast metrics, forecast curves, seasonality analysis, and single-prediction window inspectors.
+Built with **PyTorch LSTM**, **SHAP Explainable AI**, **Streamlit**, and **Plotly**, covering both micro-level smart meter telemetry (**Mathura & Bareilly 2020**) and macro-level Indian state power dispatch (**POSOCO / Grid-India 2019–2020**).
 
 ---
 
-## 🛠️ Tech Stack
+## ⚡ Quick Start (For Group Members)
 
-| Layer | Technologies |
-|---|---|
-| **Deep Learning & Modeling** | PyTorch (`torch.nn.LSTM`), Scikit-learn, Joblib |
-| **Data Engineering** | Pandas, NumPy |
-| **Explainability (XAI)** | SHAP, PyTorch Gradient Attribution |
-| **Data Visualization** | Plotly Express & Graph Objects |
-| **Web Dashboard** | Streamlit |
+> [!TIP]
+> **No training required to test!** Pre-trained model weights (`models/lstm_energy.pt`) and processed benchmark datasets (`data/processed/`) are already included in this branch. You can clone and run the interactive dashboard in under 3 minutes.
 
----
-
-## 📂 Project Structure
-
-```text
-AI-Energy-and-Carbon-Forecasting-Web/
-├── data/
-│   ├── raw/                                ← Raw input CSVs
-│   │   ├── CEEW - Smart meter data Mathura 2020.csv
-│   │   └── weather.csv
-│   └── processed/                          ← Cleaned, continuous hourly dataset
-│       └── merged_hourly.csv
-│
-├── src/                                    ← Core pipeline source modules
-│   ├── __init__.py
-│   ├── data_engineering.py                 ← Phase 1: Aggregation, cleaning & interpolation
-│   ├── eda_visualization.py                ← Phase 2: Exploratory data analysis & heatmaps
-│   ├── modeling.py                         ← Phase 3: PyTorch LSTM training & sequence windowing
-│   └── explainability.py                   ← Phase 4: Deep feature attribution & SHAP plots
-│
-├── models/                                 ← Saved PyTorch model & scalers
-│   ├── lstm_energy.pt                      ← Trained LSTM weights
-│   ├── feature_scaler.pkl                  ← StandardScaler for input features
-│   ├── target_scaler.pkl                   ← StandardScaler for target kWh
-│   ├── model_config.json                   ← Model architecture hyperparameters
-│   └── metrics.json                        ← Evaluation metrics (MAE, RMSE, MAPE, R²)
-│
-├── app.py                                  ← Phase 5: Streamlit Web Dashboard
-├── requirements.txt                        ← Project dependencies
-├── .gitignore
-└── README.md
-```
-
----
-
-## ⚙️ Installation & Setup
-
-### 1. Clone the repository
+### 1. Clone the repository & switch to branch
 ```bash
 git clone https://github.com/OmprakashMaurya16/AI-Energy-and-Carbon-Forecasting-Web.git
 cd AI-Energy-and-Carbon-Forecasting-Web
+git checkout Sujal
 ```
 
-### 2. Create and activate virtual environment
+### 2. Set Up Virtual Environment
+
+> [!IMPORTANT]
+> **Recommended Python Version**: **Python 3.10 to 3.12**.
+> PyTorch and SHAP have stable pre-built wheels for Python 3.12 on Windows.
+
 * **Windows (PowerShell):**
   ```powershell
-  python -m venv venv
+  # If you have multiple Python versions installed, use Python 3.12:
+  py -3.12 -m venv venv
   .\venv\Scripts\Activate.ps1
   ```
+  *(If PowerShell gives a script execution policy error, run: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`)*
+
 * **macOS / Linux:**
   ```bash
   python3 -m venv venv
   source venv/bin/activate
   ```
 
-### 3. Install dependencies
+### 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
----
-
-## 🏃 Execution Guide
-
-### Option A: Run the Web Dashboard
+### 4. Launch the Web Dashboard
 ```bash
 streamlit run app.py
 ```
-Open your browser and navigate to `http://localhost:8501`.
-
-### Option B: Run Pipeline Modules Individually
-
-```bash
-# 1. Prepare and clean data (3-min -> 1-hr gapless aggregation)
-python src/data_engineering.py
-
-# 2. Train the PyTorch LSTM model and export weights
-python src/modeling.py
-
-# 3. Compute Deep Feature Attributions & SHAP visualizations
-python src/explainability.py
-
-# 4. Generate Exploratory Data Analysis (EDA) charts
-python src/eda_visualization.py
-```
+Your default web browser will automatically open: **`http://localhost:8501`**.
 
 ---
 
-## 🧠 Model Architecture & Methodology
+## 🌟 Key Features & Dashboard Walkthrough
+
+The web dashboard is organized into 6 tabs with interactive widgets and plain-English guidance:
+
+### 📍 Dynamic Region & Year Switcher (Sidebar)
+* Select between **Mathura (2020)**, **Bareilly (2020)**, or any of **33 Indian States & Union Territories (2019–2020)**.
+* Shows dataset origin, collection year, and regional **Central Electricity Authority (CEA)** $\text{CO}_2$ emission factor ($0.45 - 0.96\text{ kg CO}_2/\text{kWh}$).
+
+### 📖 Plain-English Glossary (Sidebar)
+* Clickable expander in the sidebar defining domain terms in everyday words:
+  * **kWh & MU**: Unit of electricity (1 MU = 1,000,000 kWh).
+  * **LSTM**: Deep learning recurrent neural network specialized in sequence memory.
+  * **SHAP / XAI**: Feature attribution explaining *why* the model made a forecast.
+  * **CEA Baseline**: Government emissions factor converting electricity used into $\text{kg CO}_2$.
+  * **MAE / RMSE / MAPE / R²**: Error metrics explaining accuracy in simple terms.
+
+### 📑 The 6 Application Tabs
+1. **Executive Overview**: High-level KPIs, 24-hour forecasted energy, dynamic carbon emission gauge, equivalent EV kilometers, and tree offset equivalencies.
+2. **24h Forecast Curve**: 168-hour historical context + 24-hour ahead multi-step prediction curves with confidence intervals and zoom controls.
+3. **Explainability (XAI)**: SHAP Beeswarm, feature importance bar charts, and single-step waterfall breakdown illustrating the influence of temperature, humidity, voltage, and calendar cycles.
+4. **Data Explorer & Heatmaps**: Interactive 2D hour-by-month load heatmaps, seasonal profiles, and data table filtering.
+5. **Model Performance**: Actual vs. Predicted scatter plot with $R^2$ fit line, residual error distributions, and error metrics table.
+6. **State Comparison (Faculty Validation Benchmark)**:
+   * **Multi-State Accuracy Leaderboard**: Compare model generalization across 10 key states (Maharashtra, Gujarat, Uttar Pradesh, Tamil Nadu, Karnataka, Delhi, Rajasthan, West Bengal, Punjab, Kerala).
+   * **Power Demand vs. Temperature Correlation**: Scatter plot with OLS trendline showing temperature sensitivity across regions.
+   * **CEA Carbon Emission Intensity Comparison**: Color-coded bar chart comparing coal-heavy vs. renewable-rich state emission intensities.
+
+---
+
+## 📂 Project Architecture
 
 ```text
-[Input Window: 168 Hours × 15 Features]
-       │
-       ▼
-[Layer 1: LSTM (hidden=128, dropout=0.2)]
-       │
-       ▼
-[Layer 2: LSTM (hidden=128)]
-       │
-       ▼
-[Linear Head: 128 -> 24]
-       │
-       ▼
-[Forecast Output: 24 Hours Ahead]
+AI-Energy-and-Carbon-Forecasting-Web/
+├── data/
+│   ├── raw/                                ← Raw datasets (CEEW smart meter data, gitignored >100MB)
+│   │   ├── CEEW - Smart meter data Bareilly 2020.csv
+│   │   └── weather.csv
+│   └── processed/                          ← Lightweight processed datasets (committed)
+│       ├── merged_hourly.csv               ← Cleaned hourly smart meter + weather dataset
+│       ├── posoco_states.csv               ← POSOCO 33-state daily energy consumption (2019–2020)
+│       └── state_weather.csv               ← Multi-state historical daily weather telemetry
+│
+├── src/                                    ← Core modules
+│   ├── __init__.py
+│   ├── data_engineering.py                 ← 3-min to 1-hr gapless aggregation & feature engineering
+│   ├── eda_visualization.py                ← Heatmap & seasonality visualizer
+│   ├── modeling.py                         ← PyTorch LSTM sequence model training
+│   ├── explainability.py                   ← Deep feature attribution (Gradient × Input & SHAP)
+│   ├── multi_state_data.py                 ← POSOCO data cleaner & Open-Meteo state weather fetcher
+│   └── multi_state_modeling.py             ← Multi-state sequence forecasting benchmark
+│
+├── scripts/
+│   └── download_weather.py                 ← Automated Open-Meteo hourly weather downloader for UP
+│
+├── models/                                 ← Saved PyTorch weights & benchmark JSONs
+│   ├── lstm_energy.pt                      ← Trained PyTorch LSTM weights (~840 KB)
+│   ├── feature_scaler.pkl                  ← Input feature scaler
+│   ├── target_scaler.pkl                   ← Target energy scaler
+│   ├── model_config.json                   ← Hyperparameters (seq_len=168, horizon=24, hidden=128)
+│   ├── metrics.json                        ← Evaluation metrics (MAE, RMSE, MAPE, R²)
+│   ├── multi_state_metrics.json            ← 10-state benchmark metrics leaderboard
+│   └── multi_state_predictions.json        ← Pre-computed state test predictions
+│
+├── app.py                                  ← Streamlit Web Application (6 Tabs + Glossary)
+├── requirements.txt                        ← Python package requirements
+├── .gitignore                              ← Ignores >300MB raw files, tracks lightweight models
+└── README.md
 ```
 
-* **Sequence Framing**: Lookback window of $168\text{ hours}$ (1 full week of historical electrical + meteorological readings).
-* **Target Horizon**: Multi-step output of $24\text{ hours}$ ahead load curves.
-* **Features Included**:
-  * Electrical: `voltage_v`, `current_a`, `frequency_hz`, and autoregressive `energy_kwh` lag.
-  * Meteorological: `temperature_c`, `humidity_pct`, `precipitation_mm`, `cloud_cover_pct`, `solar_radiation_wm2`, `wind_speed_ms`.
-  * Calendar & Cyclical: `hour_sin`, `hour_cos`, `month_sin`, `month_cos`, `is_weekend`.
+---
+
+## 🔬 Model Architecture & Mathematical Formulation
+
+```text
+[Input Sequence: 168 Hours × 15 Features]
+       │
+       ▼
+[Layer 1: LSTM (hidden_size=128, dropout=0.2)]
+       │
+       ▼
+[Layer 2: LSTM (hidden_size=128)]
+       │
+       ▼
+[Linear Dense Head: 128 -> 24]
+       │
+       ▼
+[Forecast Output: 24 Consecutive Hours]
+```
+
+* **Sequence Framing**: Lookback window of $T=168\text{ hours}$ (1 full week) to capture weekly and daily seasonality.
+* **Forecast Horizon**: Direct multi-step output of $H=24\text{ hours}$ ahead.
+* **Engineered Feature Set (15 Dimensions)**:
+  * **Electrical**: `voltage_v`, `current_a`, `frequency_hz`, and autoregressive `energy_kwh` lag.
+  * **Weather Telemetry**: `temperature_c`, `humidity_pct`, `precipitation_mm`, `cloud_cover_pct`, `solar_radiation_wm2`, `wind_speed_ms`.
+  * **Temporal & Cyclical**: $\sin(2\pi h / 24)$, $\cos(2\pi h / 24)$, $\sin(2\pi m / 12)$, $\cos(2\pi m / 12)$, `is_weekend`.
 
 ---
 
-## 🌿 Carbon Footprint Factor
+## 🔄 Retraining Pipelines from Scratch (Optional)
 
-* **Grid Emission Baseline**: **$0.82\text{ kg CO}_2/\text{kWh}$** (Northern Regional Grid / Uttar Pradesh).
-* **Reference**: *Central Electricity Authority (CEA) $\text{CO}_2$ Baseline Database for the Indian Power Sector*.
+If you wish to re-train the models or re-generate the datasets from scratch:
+
+```bash
+# 1. Download Open-Meteo hourly weather data for 2020
+python scripts/download_weather.py
+
+# 2. Process raw smart meter data into gapless hourly dataset
+# (Ensure CEEW CSV is placed in data/raw/)
+python src/data_engineering.py
+
+# 3. Train the PyTorch LSTM model (saves weights to models/lstm_energy.pt)
+python src/modeling.py
+
+# 4. Fetch multi-state weather and compute 10-state validation benchmarks
+python src/multi_state_modeling.py
+```
 
 ---
 
-## 📜 License & Acknowledgements
+## ❓ Frequently Asked Questions (FAQ) & Troubleshooting
 
-* **Dataset**: Council on Energy, Environment and Water (CEEW) Smart Meter Data Mathura (2020) & Open-Meteo Historical Weather API.
-* Developed for explainable energy forecasting and sustainable grid analytics.
+### 1. `ModuleNotFoundError: No module named 'torch'`
+Make sure your virtual environment is activated before running:
+```powershell
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+### 2. Python 3.14 wheel errors
+If you are on Python 3.14, PyTorch wheels may not be available yet. Install Python 3.12 and create your virtual environment with:
+```powershell
+py -3.12 -m venv venv
+```
+
+### 3. Port already in use (`Port 8501 is already in use`)
+Run Streamlit on a different port:
+```bash
+streamlit run app.py --server.port 8502
+```
+
+---
+
+## 📜 Acknowledgements & Data Sources
+
+* **CEEW Smart Meter Data (Mathura & Bareilly 2020)**: Council on Energy, Environment and Water.
+* **POSOCO / GRID-INDIA National Power Dispatch**: Power System Operation Corporation daily state energy reports (2019–2020).
+* **Open-Meteo Historical Weather API**: High-resolution hourly ERA5 reanalysis and historical weather telemetry.
+* **Central Electricity Authority (CEA)**: Ministry of Power, Government of India — $\text{CO}_2$ Baseline Database for the Indian Power Sector.

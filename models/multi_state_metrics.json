@@ -1,0 +1,92 @@
+{
+  "Maharashtra": {
+    "region": "Western",
+    "mean_demand_mu": 431.57,
+    "mae_mu": 17.1,
+    "rmse_mu": 24.98,
+    "r2": 0.5666,
+    "mape_pct": 4.09,
+    "emission_factor": 0.85
+  },
+  "Gujarat": {
+    "region": "Western",
+    "mean_demand_mu": 323.04,
+    "mae_mu": 14.13,
+    "rmse_mu": 22.95,
+    "r2": 0.587,
+    "mape_pct": 4.49,
+    "emission_factor": 0.84
+  },
+  "Uttar Pradesh": {
+    "region": "Northern",
+    "mean_demand_mu": 314.04,
+    "mae_mu": 30.83,
+    "rmse_mu": 44.58,
+    "r2": 0.6372,
+    "mape_pct": 9.75,
+    "emission_factor": 0.82
+  },
+  "Tamil Nadu": {
+    "region": "Southern",
+    "mean_demand_mu": 300.74,
+    "mae_mu": 17.42,
+    "rmse_mu": 23.07,
+    "r2": 0.5797,
+    "mape_pct": 6.12,
+    "emission_factor": 0.72
+  },
+  "Karnataka": {
+    "region": "Southern",
+    "mean_demand_mu": 204.11,
+    "mae_mu": 13.74,
+    "rmse_mu": 19.29,
+    "r2": 0.4848,
+    "mape_pct": 7.11,
+    "emission_factor": 0.73
+  },
+  "Delhi": {
+    "region": "Northern",
+    "mean_demand_mu": 83.38,
+    "mae_mu": 12.06,
+    "rmse_mu": 18.2,
+    "r2": 0.6478,
+    "mape_pct": 14.91,
+    "emission_factor": 0.82
+  },
+  "Rajasthan": {
+    "region": "Northern",
+    "mean_demand_mu": 218.44,
+    "mae_mu": 12.26,
+    "rmse_mu": 19.11,
+    "r2": 0.5595,
+    "mape_pct": 6.04,
+    "emission_factor": 0.83
+  },
+  "West Bengal": {
+    "region": "Eastern",
+    "mean_demand_mu": 138.71,
+    "mae_mu": 11.95,
+    "rmse_mu": 16.86,
+    "r2": 0.5593,
+    "mape_pct": 9.08,
+    "emission_factor": 0.95
+  },
+  "Punjab": {
+    "region": "Northern",
+    "mean_demand_mu": 141.15,
+    "mae_mu": 22.81,
+    "rmse_mu": 37.16,
+    "r2": 0.6942,
+    "mape_pct": 15.29,
+    "emission_factor": 0.81
+  },
+  "Kerala": {
+    "region": "Southern",
+    "mean_demand_mu": 72.19,
+    "mae_mu": 3.15,
+    "rmse_mu": 4.28,
+    "r2": 0.4107,
+    "mape_pct": 4.38,
+    "emission_factor": 0.68
+  }
+}

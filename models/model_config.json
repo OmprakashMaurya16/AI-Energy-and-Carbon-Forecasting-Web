@@ -1,0 +1,25 @@
+{
+  "n_features": 15,
+  "feature_cols": [
+    "voltage_v",
+    "current_a",
+    "frequency_hz",
+    "temperature_c",
+    "humidity_pct",
+    "precipitation_mm",
+    "wind_speed_ms",
+    "cloud_cover_pct",
+    "solar_radiation_wm2",
+    "hour_sin",
+    "hour_cos",
+    "month_sin",
+    "month_cos",
+    "is_weekend"
+  ],
+  "target_col": "energy_kwh",
+  "lookback_hours": 168,
+  "forecast_horizon": 24,
+  "hidden_size": 128,
+  "num_layers": 2,
+  "dropout": 0.2
+}

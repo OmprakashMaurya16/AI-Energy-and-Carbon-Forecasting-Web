@@ -13,9 +13,23 @@ import pandas as pd
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 
-SMART_METER_PATH = os.path.join(
-    _ROOT, "data", "raw", "CEEW - Smart meter data Mathura 2020.csv"
-)
+def _find_smart_meter_path() -> str:
+    raw_dir = os.path.join(_ROOT, "data", "raw")
+    candidates = [
+        "CEEW - Smart meter data Mathura 2020.csv",
+        "CEEW - Smart meter data Bareilly 2020.csv",
+    ]
+    for c in candidates:
+        p = os.path.join(raw_dir, c)
+        if os.path.exists(p):
+            return p
+    if os.path.exists(raw_dir):
+        for f in os.listdir(raw_dir):
+            if f.startswith("CEEW") and f.endswith(".csv"):
+                return os.path.join(raw_dir, f)
+    return os.path.join(raw_dir, candidates[0])
+
+SMART_METER_PATH = _find_smart_meter_path()
 WEATHER_PATH = os.path.join(_ROOT, "data", "raw", "weather.csv")
 PROCESSED_PATH = os.path.join(_ROOT, "data", "processed", "merged_hourly.csv")
 
